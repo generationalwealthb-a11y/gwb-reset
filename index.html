@@ -21,7 +21,6 @@
   button:disabled{opacity:.6;cursor:not-allowed;transform:none}
   .msg{padding:12px 16px;border-radius:8px;font-size:13px;font-weight:500;margin-bottom:16px;display:none}
   .msg.error{background:#FFF1F2;border:1.5px solid #FECDD3;color:#BE123C}
-  .msg.success{background:#F0FDF4;border:1.5px solid #BBF7D0;color:#15803D}
   .footer{text-align:center;margin-top:24px;font-size:11px;color:#7A8499;letter-spacing:.04em}
   .spinner{display:none;width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;margin:0 auto}
   @keyframes spin{to{transform:rotate(360deg)}}
@@ -34,12 +33,14 @@
     <div class="divider"></div>
   </div>
 
+  <!-- Loading state -->
   <div id="loading">
     <h2>Verifying link…</h2>
     <p class="subtitle">Please wait a moment.</p>
     <div class="spinner" style="display:block;margin:20px auto"></div>
   </div>
 
+  <!-- Password form — shown when token is valid -->
   <div id="form" style="display:none">
     <h2>Set New Password</h2>
     <p class="subtitle">Enter your new password below.</p>
@@ -54,14 +55,22 @@
     </button>
   </div>
 
+  <!-- Success state -->
   <div id="success" style="display:none">
     <h2>✓ Password Updated!</h2>
-    <p class="subtitle">Your password has been changed successfully.<br><br>Open the <strong>GWB Planner</strong> app and sign in with your new password.</p>
+    <p class="subtitle">Your password has been changed.<br><br>Open the <strong>GWB Planner</strong> app and sign in with your new password.</p>
   </div>
 
-  <div id="error-state" style="display:none">
+  <!-- Token expired state -->
+  <div id="expired" style="display:none">
     <h2>Link Expired</h2>
-    <p class="subtitle" id="error-msg">This reset link has expired or already been used.<br><br>Please open the <strong>GWB Planner</strong> app and request a new password reset.</p>
+    <p class="subtitle">This reset link has expired or already been used.<br><br>Open the <strong>GWB Planner</strong> app and tap <strong>"Forgot Password?"</strong> again to get a new link.</p>
+  </div>
+
+  <!-- No token — direct visit -->
+  <div id="direct" style="display:none">
+    <h2>Password Reset</h2>
+    <p class="subtitle">This page is used to reset your GWB Planner password.<br><br>To get started, open the <strong>GWB Planner</strong> app, tap <strong>"Forgot Password?"</strong> on the login screen, and follow the link in your email.</p>
   </div>
 
   <div class="footer">GWB Financial Planner · Secured by Supabase</div>
@@ -74,7 +83,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 function show(id) {
-  ['loading','form','success','error-state'].forEach(s => {
+  ['loading','form','success','expired','direct'].forEach(s => {
     document.getElementById(s).style.display = s === id ? 'block' : 'none';
   });
 }
@@ -87,46 +96,56 @@ function showMsg(text, type) {
 }
 
 window.addEventListener('load', async () => {
-  const hash = window.location.hash.substring(1);
-  const params = new URLSearchParams(hash);
+  const queryParams = new URLSearchParams(window.location.search);
+  const hashParams  = new URLSearchParams(window.location.hash.substring(1));
 
-  // Check for errors first
-  const error = params.get('error');
-  const errorDesc = params.get('error_description');
-  if (error) {
-    document.getElementById('error-msg').innerHTML =
-      'This reset link has <strong>expired</strong> or has already been used.<br><br>' +
-      'Please open the <strong>GWB Planner</strong> app and tap <strong>"Forgot Password?"</strong> again to get a new link.';
-    show('error-state');
+  // Error in URL = link was pre-fetched or expired
+  const errorCode = hashParams.get('error_code') || queryParams.get('error_code');
+  if (errorCode) {
+    show('expired');
     return;
   }
 
-  // Check for valid recovery token
-  const accessToken  = params.get('access_token');
-  const refreshToken = params.get('refresh_token');
-  const type         = params.get('type');
+  // Method 1: token_hash in query string (safer — email scanners can't consume it)
+  const tokenHash = queryParams.get('token_hash');
+  const typeQ     = queryParams.get('type');
 
-  if (accessToken && type === 'recovery') {
+  if (tokenHash && typeQ === 'recovery') {
     try {
-      const { error: sessionError } = await sb.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken || ''
+      const { error } = await sb.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: 'recovery'
       });
-      if (sessionError) throw sessionError;
+      if (error) throw error;
       show('form');
+      return;
     } catch(e) {
-      document.getElementById('error-msg').innerHTML =
-        'This reset link has expired.<br><br>' +
-        'Please open the <strong>GWB Planner</strong> app and request a new password reset.';
-      show('error-state');
+      show('expired');
+      return;
     }
-  } else {
-    // No token at all - direct visit
-    document.getElementById('error-msg').innerHTML =
-      'This page is only accessible via the password reset link sent to your email.<br><br>' +
-      'Open the <strong>GWB Planner</strong> app and tap <strong>"Forgot Password?"</strong> to get started.';
-    show('error-state');
   }
+
+  // Method 2: access_token in hash (old method fallback)
+  const accessToken = hashParams.get('access_token');
+  const typeH       = hashParams.get('type');
+
+  if (accessToken && typeH === 'recovery') {
+    try {
+      const { error } = await sb.auth.setSession({
+        access_token: accessToken,
+        refresh_token: hashParams.get('refresh_token') || ''
+      });
+      if (error) throw error;
+      show('form');
+      return;
+    } catch(e) {
+      show('expired');
+      return;
+    }
+  }
+
+  // No token at all — direct visit to the page
+  show('direct');
 });
 
 async function updatePassword() {
@@ -137,14 +156,14 @@ async function updatePassword() {
   if (pw1 !== pw2) { showMsg('Passwords do not match.', 'error'); return; }
 
   document.getElementById('btn-text').style.display = 'none';
-  document.getElementById('spinner').style.display = 'block';
+  document.getElementById('spinner').style.display  = 'block';
   document.getElementById('btn').disabled = true;
 
   const { error } = await sb.auth.updateUser({ password: pw1 });
 
   if (error) {
     document.getElementById('btn-text').style.display = 'block';
-    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('spinner').style.display  = 'none';
     document.getElementById('btn').disabled = false;
     showMsg(error.message, 'error');
   } else {
