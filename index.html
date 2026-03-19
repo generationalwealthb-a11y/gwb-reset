@@ -33,14 +33,12 @@
     <div class="divider"></div>
   </div>
 
-  <!-- Loading state -->
   <div id="loading">
     <h2>Verifying link…</h2>
     <p class="subtitle">Please wait a moment.</p>
     <div class="spinner" style="display:block;margin:20px auto"></div>
   </div>
 
-  <!-- Password form — shown when token is valid -->
   <div id="form" style="display:none">
     <h2>Set New Password</h2>
     <p class="subtitle">Enter your new password below.</p>
@@ -55,19 +53,16 @@
     </button>
   </div>
 
-  <!-- Success state -->
   <div id="success" style="display:none">
     <h2>✓ Password Updated!</h2>
     <p class="subtitle">Your password has been changed.<br><br>Open the <strong>GWB Planner</strong> app and sign in with your new password.</p>
   </div>
 
-  <!-- Token expired state -->
   <div id="expired" style="display:none">
     <h2>Link Expired</h2>
     <p class="subtitle">This reset link has expired or already been used.<br><br>Open the <strong>GWB Planner</strong> app and tap <strong>"Forgot Password?"</strong> again to get a new link.</p>
   </div>
 
-  <!-- No token — direct visit -->
   <div id="direct" style="display:none">
     <h2>Password Reset</h2>
     <p class="subtitle">This page is used to reset your GWB Planner password.<br><br>To get started, open the <strong>GWB Planner</strong> app, tap <strong>"Forgot Password?"</strong> on the login screen, and follow the link in your email.</p>
@@ -79,7 +74,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 const SUPABASE_URL = 'https://tkhhzubopefzanezqzss.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRraGh6dWJvcGVmemFuZXpxenNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI4MjM3MTksImV4cCI6MjA1ODM5OTcxOX0.NxMsXFNGNMTpFCrS_-bZQEIxwGPxX1wLi2Ks0GRWJQA';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRraGh6dWJvcGVmemFuZXpxenNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2OTc3NDMsImV4cCI6MjA4OTI3Mzc0M30.LKkfH58CzcGQIyZsf6LAH2F-myQsl5SrhDXVtN6hMUc';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 function show(id) {
@@ -99,33 +94,23 @@ window.addEventListener('load', async () => {
   const queryParams = new URLSearchParams(window.location.search);
   const hashParams  = new URLSearchParams(window.location.hash.substring(1));
 
-  // Error in URL = link was pre-fetched or expired
   const errorCode = hashParams.get('error_code') || queryParams.get('error_code');
-  if (errorCode) {
-    show('expired');
-    return;
-  }
+  if (errorCode) { show('expired'); return; }
 
-  // Method 1: token_hash in query string (safer — email scanners can't consume it)
+  // Method 1: token_hash in query string
   const tokenHash = queryParams.get('token_hash');
   const typeQ     = queryParams.get('type');
 
   if (tokenHash && typeQ === 'recovery') {
     try {
-      const { error } = await sb.auth.verifyOtp({
-        token_hash: tokenHash,
-        type: 'recovery'
-      });
+      const { error } = await sb.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' });
       if (error) throw error;
       show('form');
       return;
-    } catch(e) {
-      show('expired');
-      return;
-    }
+    } catch(e) { show('expired'); return; }
   }
 
-  // Method 2: access_token in hash (old method fallback)
+  // Method 2: access_token in hash fragment
   const accessToken = hashParams.get('access_token');
   const typeH       = hashParams.get('type');
 
@@ -138,13 +123,10 @@ window.addEventListener('load', async () => {
       if (error) throw error;
       show('form');
       return;
-    } catch(e) {
-      show('expired');
-      return;
-    }
+    } catch(e) { show('expired'); return; }
   }
 
-  // No token at all — direct visit to the page
+  // Direct visit — no token
   show('direct');
 });
 
