@@ -8,11 +8,11 @@
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Inter',system-ui,sans-serif;background:linear-gradient(145deg,#0A1628 0%,#132040 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
   .card{background:#fff;border-radius:20px;padding:40px 36px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
-  .logo{text-align:center;margin-bottom:28px}
+  .logo{text-align:center;margin-bottom:20px}
   .logo img{width:160px;height:160px;object-fit:contain;display:block;margin:0 auto}
-  .divider{width:40px;height:2px;background:linear-gradient(90deg,#B8923A,#D4AA5A);margin:12px auto}
+  .divider{width:40px;height:2px;background:linear-gradient(90deg,#B8923A,#D4AA5A);margin:10px auto 20px}
   h2{font-size:20px;font-weight:700;color:#0A1628;text-align:center;margin-bottom:6px}
-  .subtitle{font-size:13px;color:#7A8499;text-align:center;margin-bottom:28px}
+  .subtitle{font-size:13px;color:#7A8499;text-align:center;margin-bottom:24px;line-height:1.6}
   label{display:block;font-size:11px;font-weight:600;color:#3D4A5C;margin-bottom:6px;letter-spacing:.03em}
   input{width:100%;padding:12px 14px;border:1.5px solid #EAECF0;border-radius:8px;font-size:14px;color:#0D1117;outline:none;transition:all .2s;margin-bottom:16px}
   input:focus{border-color:#B8923A;box-shadow:0 0 0 3px rgba(184,146,58,.12)}
@@ -45,9 +45,9 @@
     <p class="subtitle">Enter your new password below.</p>
     <div class="msg" id="msg"></div>
     <label>New Password</label>
-    <input type="password" id="pw1" placeholder="••••••••" minlength="6">
+    <input type="password" id="pw1" placeholder="At least 6 characters" minlength="6">
     <label>Confirm Password</label>
-    <input type="password" id="pw2" placeholder="••••••••" minlength="6">
+    <input type="password" id="pw2" placeholder="Repeat your new password" minlength="6">
     <button id="btn" onclick="updatePassword()">
       <span id="btn-text">Update Password</span>
       <div class="spinner" id="spinner"></div>
@@ -56,12 +56,12 @@
 
   <div id="success" style="display:none">
     <h2>✓ Password Updated!</h2>
-    <p class="subtitle" style="margin-bottom:0">Your password has been changed successfully.<br><br>Open the <strong>GWB Planner</strong> app and sign in with your new password.</p>
+    <p class="subtitle">Your password has been changed successfully.<br><br>Open the <strong>GWB Planner</strong> app and sign in with your new password.</p>
   </div>
 
   <div id="error-state" style="display:none">
     <h2>Link Expired</h2>
-    <p class="subtitle">This reset link has expired or already been used.<br><br>Please request a new password reset from the GWB Planner app.</p>
+    <p class="subtitle" id="error-msg">This reset link has expired or already been used.<br><br>Please open the <strong>GWB Planner</strong> app and request a new password reset.</p>
   </div>
 
   <div class="footer">GWB Financial Planner · Secured by Supabase</div>
@@ -71,7 +71,6 @@
 <script>
 const SUPABASE_URL = 'https://tkhhzubopefzanezqzss.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRraGh6dWJvcGVmemFuZXpxenNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI4MjM3MTksImV4cCI6MjA1ODM5OTcxOX0.NxMsXFNGNMTpFCrS_-bZQEIxwGPxX1wLi2Ks0GRWJQA';
-
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 function show(id) {
@@ -90,17 +89,42 @@ function showMsg(text, type) {
 window.addEventListener('load', async () => {
   const hash = window.location.hash.substring(1);
   const params = new URLSearchParams(hash);
-  const accessToken = params.get('access_token');
-  const type = params.get('type');
+
+  // Check for errors first
+  const error = params.get('error');
+  const errorDesc = params.get('error_description');
+  if (error) {
+    document.getElementById('error-msg').innerHTML =
+      'This reset link has <strong>expired</strong> or has already been used.<br><br>' +
+      'Please open the <strong>GWB Planner</strong> app and tap <strong>"Forgot Password?"</strong> again to get a new link.';
+    show('error-state');
+    return;
+  }
+
+  // Check for valid recovery token
+  const accessToken  = params.get('access_token');
+  const refreshToken = params.get('refresh_token');
+  const type         = params.get('type');
 
   if (accessToken && type === 'recovery') {
-    const { error } = await sb.auth.setSession({
-      access_token: accessToken,
-      refresh_token: params.get('refresh_token') || ''
-    });
-    if (error) { show('error-state'); }
-    else { show('form'); }
+    try {
+      const { error: sessionError } = await sb.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken || ''
+      });
+      if (sessionError) throw sessionError;
+      show('form');
+    } catch(e) {
+      document.getElementById('error-msg').innerHTML =
+        'This reset link has expired.<br><br>' +
+        'Please open the <strong>GWB Planner</strong> app and request a new password reset.';
+      show('error-state');
+    }
   } else {
+    // No token at all - direct visit
+    document.getElementById('error-msg').innerHTML =
+      'This page is only accessible via the password reset link sent to your email.<br><br>' +
+      'Open the <strong>GWB Planner</strong> app and tap <strong>"Forgot Password?"</strong> to get started.';
     show('error-state');
   }
 });
